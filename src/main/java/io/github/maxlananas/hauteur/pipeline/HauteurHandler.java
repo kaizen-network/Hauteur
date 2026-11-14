@@ -29,6 +29,7 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.Clien
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundForgetLevelChunkPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundLevelChunkWithLightPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundSectionBlocksUpdatePacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosRotPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
@@ -76,6 +77,8 @@ public final class HauteurHandler extends ChannelDuplexHandler {
     private final Diagnostics logger;
     private final ChannelHandlerContext managerContext;
     private final HeldQueue held;
+    /** Offset each server teleport was translated with, by teleport id, until Geyser sends its accept. */
+    private final ConcurrentHashMap<Integer, Integer> teleportOffsets = new ConcurrentHashMap<>();
     /** Serializes freeze transitions with outbound writes; see the class javadoc. */
     private final Object freezeLock = new Object();
     /**
@@ -266,6 +269,9 @@ public final class HauteurHandler extends ChannelDuplexHandler {
 
     private void translateInbound(ChannelHandlerContext ctx, MinecraftPacket packet) {
         int offset = state.offset();
+        if (packet instanceof ClientboundPlayerPositionPacket teleport) {
+            teleportOffsets.put(teleport.getId(), appliesToPlayer() ? offset : 0);
+        }
         if (offset == 0 || !appliesToPlayer()) {
             ctx.fireChannelRead(packet);
             return;
@@ -327,7 +333,13 @@ public final class HauteurHandler extends ChannelDuplexHandler {
                 return;
             }
             synchronized (freezeLock) {
-                if (state.frozen()) {
+                if (packet instanceof ServerboundAcceptTeleportationPacket accept) {
+                    // Built by Geyser, not the client, from a teleport already translated: its frame is the
+                    // teleport's, known even while a switch is in flight.
+                    Integer recorded = teleportOffsets.remove(accept.getId());
+                    int offset = recorded != null ? recorded : appliesToPlayer() ? state.offset() : 0;
+                    ctx.write(OutboundYTransforms.apply(accept, offset, core.commandConfig()), promise);
+                } else if (state.frozen()) {
                     writeFrozen(ctx, packet, promise);
                 } else {
                     writeLive(ctx, packet, promise);
@@ -791,6 +803,7 @@ public final class HauteurHandler extends ChannelDuplexHandler {
      */
     private void startNewWorld() {
         state.resetChunkCache();
+        teleportOffsets.clear();
         state.nextWorldGeneration();
         state.setWindowDirty(true);
         resetTransition();

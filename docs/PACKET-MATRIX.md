@@ -6,6 +6,8 @@ with it. `A` = shifted by the offset, `R` = relative and never shifted, `-` = no
 Audited against Geyser `2.11.2-SNAPSHOT` (commit `b2dab3c73`) and MCProtocolLib `b77d50c3` (the 2026-07-09
 snapshot Geyser depends on). Re-audit on every Geyser bump, following [CONTRIBUTING.md](../CONTRIBUTING.md).
 
+Re-audited for Geyser `2.12.1` build 1302 (MCProtocolLib `26.3-3`) by diffing every packet class's public API against `26.2-SNAPSHOT`. Changed rows: `ClientboundEntityPositionSyncPacket` (steps), `ServerboundAcceptTeleportationPacket` (now carries a position), and the new `ClientboundAddTransientBlockPacket`.
+
 ## Server to client (inbound, real to client)
 
 | Packet | Field(s) | Action | Note |
@@ -21,7 +23,8 @@ snapshot Geyser depends on). Re-audit on every Geyser bump, following [CONTRIBUT
 | `ClientboundDamageEventPacket` | sourcePosition (absolute, nullable) | A | Null when the source has no position. Entity and cause ids are not positions. |
 | `ClientboundAddEntityPacket` | y | A | |
 | `ClientboundTeleportEntityPacket` | position (absolute) | A | Relative Y (`R`) is not shifted. Player id: authoritative switch trigger. |
-| `ClientboundEntityPositionSyncPacket` | position | A | Player id: authoritative switch trigger. |
+| `ClientboundEntityPositionSyncPacket` | end position, or every step's position when stepped | A | Player id: authoritative switch trigger (the last step when stepped, as Geyser moves to it). |
+| `ClientboundAddTransientBlockPacket` | position | - | No Geyser translator in 2.12.1; passes untouched. |
 | `ClientboundPlayerPositionPacket` | position (absolute) | A | Own-player teleport. Relative Y is not shifted. Authoritative switch trigger. |
 | `ClientboundMoveVehiclePacket` | position | A | |
 | `ClientboundMoveMinecartPacket` | each step position | A | Step movement is R. |
@@ -53,7 +56,7 @@ snapshot Geyser depends on). Re-audit on every Geyser bump, following [CONTRIBUT
 | `ServerboundTestInstanceBlockActionPacket` | pos | A | Hold |
 | `ServerboundChatCommandSignedPacket` | command | Rewrites the first position triple of allowlisted commands, only when unsigned | Drop when unsigned; transmit when signed |
 | `ServerboundInteractPacket` | location | R (offset within the entity) | Transmit |
-| `ServerboundAcceptTeleportationPacket` | id | - | Transmit |
+| `ServerboundAcceptTeleportationPacket` | x, y, z (26.3+) | A, with the offset its teleport was translated in | Translated even while frozen: Geyser builds it, not the client |
 | `ServerboundSetCommandMinecartPacket` | command, flag | - (no position on the wire) | Transmit |
 | Other serverbound packets (inventory, chat, containers, abilities, input, ...) | - | - | Transmit |
 

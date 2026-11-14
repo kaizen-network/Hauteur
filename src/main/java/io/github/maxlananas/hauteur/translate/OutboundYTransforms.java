@@ -8,6 +8,7 @@ import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.S
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundSetCommandBlockPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundSetJigsawBlockPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.inventory.ServerboundSetStructureBlockPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundBlockEntityTagQueryPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundJigsawGeneratePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundMoveVehiclePacket;
@@ -168,6 +169,10 @@ public final class OutboundYTransforms {
             return packet;
         }
         if (packet instanceof ServerboundMovePlayerPosPacket p) {
+            return p.withY(p.getY() + offset);
+        }
+        if (packet instanceof ServerboundAcceptTeleportationPacket p) {
+            // Since 26.3 the accept echoes the absolute teleport position Geyser was given.
             return p.withY(p.getY() + offset);
         }
         if (packet instanceof ServerboundMovePlayerPosRotPacket p) {

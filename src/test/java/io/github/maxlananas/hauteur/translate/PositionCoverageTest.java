@@ -7,8 +7,10 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.player.Hand;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PositionElement;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundDamageEventPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundEntityPositionSyncPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundTeleportEntityPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundSetCarriedItemPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosRotPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
@@ -174,5 +176,30 @@ class PositionCoverageTest {
     void zeroOffsetIsAnIdentityForEveryPacket() {
         var pos = new ClientboundPlayerPositionPacket(3, Vector3d.from(0, 1500, 0), Vector3d.ZERO, 0f, 0f, List.of());
         assertSame(pos, InboundYTransforms.apply(pos, 0));
+    }
+
+    @Test
+    void positionSyncShiftsTheEndPositionOrEveryStep() {
+        var plain = new ClientboundEntityPositionSyncPacket(5, false, Vector3d.from(1, 900, 2), null, 0f, 0f, true);
+        var shiftedPlain = (ClientboundEntityPositionSyncPacket) InboundYTransforms.apply(plain, 600);
+        assertEquals(300, shiftedPlain.getEndPosition().getY());
+        assertEquals(900, InboundYTransforms.syncY(plain));
+
+        var stepped = new ClientboundEntityPositionSyncPacket(5, true, null, List.of(
+            new ClientboundEntityPositionSyncPacket.PositionStep(Vector3d.from(1, 890, 2), 0),
+            new ClientboundEntityPositionSyncPacket.PositionStep(Vector3d.from(1, 900, 2), 1)), 0f, 0f, true);
+        var steps = ((ClientboundEntityPositionSyncPacket) InboundYTransforms.apply(stepped, 600)).getSteps();
+        assertEquals(290, steps.get(0).position().getY());
+        assertEquals(300, steps.get(1).position().getY());
+        assertEquals(1, steps.get(1).tickOffset());
+        assertEquals(900, InboundYTransforms.syncY(stepped), "Geyser moves the entity to the last step");
+    }
+
+    @Test
+    void teleportAcceptCarriesAnAbsoluteYAndIsShifted() {
+        var accept = new ServerboundAcceptTeleportationPacket(7, 1, 300, 2, 0f, 0f);
+        var out = (ServerboundAcceptTeleportationPacket) OutboundYTransforms.apply(accept, 600, NO_COMMANDS);
+        assertEquals(900, out.getY());
+        assertEquals(7, out.getId());
     }
 }

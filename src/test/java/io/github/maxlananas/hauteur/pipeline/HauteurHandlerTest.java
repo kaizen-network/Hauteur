@@ -6,6 +6,7 @@ import io.github.maxlananas.hauteur.translate.CommandYRewrite;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.embedded.EmbeddedChannel;
+import org.cloudburstmc.math.vector.Vector3d;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
@@ -13,8 +14,10 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
 import org.geysermc.mcprotocollib.protocol.data.game.level.LightUpdateData;
 import org.geysermc.mcprotocollib.protocol.data.game.level.block.BlockEntityInfo;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundTeleportEntityPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundBlockUpdatePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundLevelChunkWithLightPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
 import org.junit.jupiter.api.Test;
@@ -409,5 +412,23 @@ class HauteurHandlerTest {
 
         assertEquals(TARGET_OFFSET, rig.state.offset(), "the window still switches");
         assertTrue(rig.drainInbound().isEmpty(), "but a not-yet-spawned client is not snapped");
+    }
+
+    @Test
+    void teleportAcceptSentDuringTheFreezeUsesItsTeleportsFrame() {
+        Rig rig = new Rig(windowNeeded());
+        rig.channel.writeInbound(new ClientboundPlayerPositionPacket(77, Vector3d.from(0.5, HIGH_REAL_Y, 0.5),
+            Vector3d.ZERO, 0f, 0f, List.of()));
+        assertEquals(TARGET_OFFSET, rig.state.offset());
+        assertTrue(rig.state.frozen());
+        var teleport = (ClientboundPlayerPositionPacket) rig.drainInbound().stream()
+            .filter(ClientboundPlayerPositionPacket.class::isInstance).findFirst().orElseThrow();
+        assertEquals(HIGH_REAL_Y - TARGET_OFFSET, teleport.getPosition().getY(), 1e-9);
+
+        // Geyser echoes the window-space position it was given; the server must get the real one back.
+        rig.channel.writeOutbound(new ServerboundAcceptTeleportationPacket(77, 0.5, teleport.getPosition().getY(),
+            0.5, 0f, 0f));
+        var accept = (ServerboundAcceptTeleportationPacket) rig.channel.readOutbound();
+        assertEquals(HIGH_REAL_Y, accept.getY(), 1e-9);
     }
 }
