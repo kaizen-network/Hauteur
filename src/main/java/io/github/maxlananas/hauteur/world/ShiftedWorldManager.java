@@ -7,7 +7,7 @@ import org.geysermc.geyser.session.GeyserSession;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.GameMode;
 import org.geysermc.mcprotocollib.protocol.data.game.setting.Difficulty;
 
-import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -89,7 +89,7 @@ public final class ShiftedWorldManager extends WorldManager {
     }
 
     @Override
-    public void getDecoratedPotData(GeyserSession session, Vector3i pos, Consumer<List<String>> apply) {
+    public void getDecoratedPotData(GeyserSession session, Vector3i pos, Consumer<Map<String, String>> apply) {
         delegate.getDecoratedPotData(session, Vector3i.from(pos.getX(), pos.getY() + readShift(session), pos.getZ()),
             apply);
     }

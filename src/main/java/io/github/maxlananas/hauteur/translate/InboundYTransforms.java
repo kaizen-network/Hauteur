@@ -88,8 +88,18 @@ public final class InboundYTransforms {
             return p.withPosition(shift(p.getPosition(), offset));
         }
         if (packet instanceof ClientboundEntityPositionSyncPacket p) {
-            Vector3d pos = p.getPosition();
-            return p.withPosition(Vector3d.from(pos.getX(), pos.getY() - offset, pos.getZ()));
+            // Stepped syncs carry absolute positions per step and a null end position; plain ones the reverse.
+            if (p.isStepped()) {
+                List<ClientboundEntityPositionSyncPacket.PositionStep> out = new ArrayList<>(p.getSteps().size());
+                for (ClientboundEntityPositionSyncPacket.PositionStep s : p.getSteps()) {
+                    Vector3d pos = s.position();
+                    out.add(new ClientboundEntityPositionSyncPacket.PositionStep(
+                        Vector3d.from(pos.getX(), pos.getY() - offset, pos.getZ()), s.tickOffset()));
+                }
+                return p.withSteps(out);
+            }
+            Vector3d pos = p.getEndPosition();
+            return p.withEndPosition(Vector3d.from(pos.getX(), pos.getY() - offset, pos.getZ()));
         }
         if (packet instanceof ClientboundBlockEventPacket p) {
             return p.withPosition(shift(p.getPosition(), offset));
@@ -149,6 +159,15 @@ public final class InboundYTransforms {
             return pos;
         }
         return Vector3d.from(pos.getX(), pos.getY() - offset, pos.getZ());
+    }
+
+    /** Real Y a sync packet moves its entity to, as Geyser reads it: the last step when stepped. NaN if none. */
+    public static double syncY(ClientboundEntityPositionSyncPacket p) {
+        if (!p.isStepped()) {
+            return p.getEndPosition().getY();
+        }
+        List<ClientboundEntityPositionSyncPacket.PositionStep> steps = p.getSteps();
+        return steps.isEmpty() ? Double.NaN : steps.getLast().position().getY();
     }
 
     private static Vector3i shift(Vector3i v, int offset) {

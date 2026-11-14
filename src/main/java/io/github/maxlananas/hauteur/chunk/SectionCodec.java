@@ -9,8 +9,8 @@ package io.github.maxlananas.hauteur.chunk;
  * {@code short blockCount, short fluidCount, dataPalette(blocks), dataPalette(biomes)}. A data palette
  * is {@code ubyte bitsPerEntry}; 0 means a singleton palette (one varint id, no storage); otherwise an
  * optional varint-prefixed palette id list (absent for global palettes, i.e. when bitsPerEntry exceeds
- * the palette type's maximum) followed by fixed-size long-array storage (varint long count, then that
- * many 8-byte longs). This mirrors {@code MinecraftTypes.readChunkSection}/{@code writeDataPalette} of
+ * the palette type's maximum) followed by fixed-size long-array storage: no count on the wire (1.21.5+),
+ * {@code ceil(entries / (64 / bitsPerEntry))} 8-byte longs. This mirrors {@code MinecraftTypes.readChunkSection}/{@code writeDataPalette} of
  * mcprotocollib, which is the decoder Geyser itself feeds this payload to.</p>
  *
  * <p>Reslicing a windowed chunk therefore only needs the byte extent of each section, not the block
@@ -34,6 +34,9 @@ public final class SectionCodec {
      */
     private static final int BLOCK_MAX_PALETTE_BITS = 8;
     private static final int BIOME_MAX_PALETTE_BITS = 3;
+    /** Entries per section, mcprotocollib's {@code PaletteType.getStorageSize()}: 16^3 blocks, 4^3 biomes. */
+    private static final int BLOCK_ENTRIES = 4096;
+    private static final int BIOME_ENTRIES = 64;
 
     private SectionCodec() {
     }
@@ -54,8 +57,8 @@ public final class SectionCodec {
             throw new FormatException("section header out of bounds");
         }
         int pos = offset + 4; // block count + fluid count
-        pos = skipPalette(data, pos, BLOCK_MAX_PALETTE_BITS);
-        pos = skipPalette(data, pos, BIOME_MAX_PALETTE_BITS);
+        pos = skipPalette(data, pos, BLOCK_MAX_PALETTE_BITS, BLOCK_ENTRIES);
+        pos = skipPalette(data, pos, BIOME_MAX_PALETTE_BITS, BIOME_ENTRIES);
         if (pos > data.length) {
             throw new FormatException("section exceeds payload bounds");
         }
@@ -118,7 +121,7 @@ public final class SectionCodec {
         return new Result(out, parsed, anomaly);
     }
 
-    private static int skipPalette(byte[] data, int pos, int maxListBits) {
+    private static int skipPalette(byte[] data, int pos, int maxListBits, int entries) {
         int bitsPerEntry = readUnsignedByte(data, pos++);
         if (bitsPerEntry == 0) {
             // Singleton palette: one state id, no storage. One scan.
@@ -137,11 +140,14 @@ public final class SectionCodec {
                 pos = skipVarint(data, pos);
             }
         }
-        // Fixed-size long array storage.
-        long longs = readVarintScan(data, pos);
-        pos = (int) (longs >>> 32);
-        long bytes = ((int) longs) * 8L; // the int cast keeps the low 32 bits, as before
-        if (bytes < 0 || bytes > data.length - pos) {
+        // Fixed-size long array storage, no length prefix (1.21.5+): the size follows from the bit width,
+        // exactly as mcprotocollib's BitStorage computes it. Above 32 bits BitStorage itself rejects the section.
+        if (bitsPerEntry > 32) {
+            throw new FormatException("bits per entry out of range");
+        }
+        int valuesPerLong = 64 / bitsPerEntry;
+        long bytes = (long) ((entries + valuesPerLong - 1) / valuesPerLong) * 8L;
+        if (bytes > data.length - pos) {
             throw new FormatException("storage array out of bounds");
         }
         return pos + (int) bytes;

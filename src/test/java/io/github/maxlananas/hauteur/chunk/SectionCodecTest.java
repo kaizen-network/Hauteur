@@ -24,7 +24,8 @@ class SectionCodecTest {
         return out.toByteArray();
     }
 
-    static byte[] listPaletteSection(int[] paletteIds, int[] storage) {
+    /** 4-bit list palette: storage is a fixed 4096 / 16 = 256 longs with no count on the wire. */
+    static byte[] listPaletteSection(int[] paletteIds) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[] {8, 0, 0, 0}, 0, 4); // block count 8
         out.write(4); // bits per entry (<= 4 for blocks => list palette)
@@ -32,35 +33,22 @@ class SectionCodecTest {
         for (int id : paletteIds) {
             out.write(id & 0x7F);
         }
-        out.write(storage.length); // storage long count (helper: <128)
-        for (int unused : storage) {
-            out.write(new byte[8], 0, 8);
-        }
+        out.write(new byte[256 * 8], 0, 256 * 8);
         // biome palette: singleton plains
         out.write(0);
         out.write(0);
         return out.toByteArray();
     }
 
-    static byte[] globalPaletteSection(int longCount) {
+    /** 9-bit global palette: 64 / 9 = 7 values per long, so ceil(4096 / 7) = 586 longs, no count on the wire. */
+    static byte[] globalPaletteSection() {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[] {0, 1, 0, 0}, 0, 4); // fluid count 256?? value not parsed, just preserved
         out.write(9); // block bits > max palette bits (8) => global palette, no id list
-        writeVarInt(out, longCount);
-        for (int i = 0; i < longCount; i++) {
-            out.write(new byte[8], 0, 8);
-        }
+        out.write(new byte[586 * 8], 0, 586 * 8);
         out.write(0); // biome singleton
         out.write(0);
         return out.toByteArray();
-    }
-
-    static void writeVarInt(ByteArrayOutputStream out, int value) {
-        while ((value & ~0x7F) != 0) {
-            out.write((value & 0x7F) | 0x80);
-            value >>>= 7;
-        }
-        out.write(value);
     }
 
     static byte[] concat(byte[]... parts) {
@@ -86,9 +74,9 @@ class SectionCodecTest {
     void singletonAndListSectionsHaveExactLengths() {
         byte[] s = singletonSection(0, 0);
         assertEquals(s.length, SectionCodec.sectionLength(s, 0));
-        byte[] l = listPaletteSection(new int[] {0, 12}, new int[3]);
+        byte[] l = listPaletteSection(new int[] {0, 12});
         assertEquals(l.length, SectionCodec.sectionLength(l, 0));
-        byte[] g = globalPaletteSection(256); // full block storage
+        byte[] g = globalPaletteSection(); // full block storage
         assertEquals(g.length, SectionCodec.sectionLength(g, 0));
     }
 
@@ -123,17 +111,17 @@ class SectionCodecTest {
 
     @Test
     void truncatedSectionLengthThrows() {
-        byte[] s = listPaletteSection(new int[] {0, 12}, new int[3]);
+        byte[] s = listPaletteSection(new int[] {0, 12});
         byte[] cut = Arrays.copyOf(s, s.length - 4);
         assertThrows(SectionCodec.FormatException.class, () -> SectionCodec.sectionLength(cut, 0));
     }
 
     @Test
-    void hugeStorageCountThrows() {
+    void bitsAbove32Throw() {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(new byte[] {0, 0, 0, 0}, 0, 4);
-        out.write(9); // global block palette
-        writeVarInt(out, 1 << 24); // absurd long count
+        out.write(33); // no BitStorage holds more than 32 bits per entry
+        out.write(new byte[4096 * 8], 0, 4096 * 8);
         assertThrows(SectionCodec.FormatException.class,
             () -> SectionCodec.sectionLength(out.toByteArray(), 0));
     }
@@ -184,12 +172,12 @@ class SectionCodecTest {
     @Test
     void reslicePreservesBytesOfMovedSections() {
         Random rnd = new Random(42);
-        byte[] payload = concat(globalPaletteSection(256), singletonSection(3, 0), listPaletteSection(new int[] {0, 1}, new int[16]));
+        byte[] payload = concat(globalPaletteSection(), singletonSection(3, 0), listPaletteSection(new int[] {0, 1}));
         byte[] out = SectionCodec.resliceTolerant(payload, 3, 1, 4).data();
         // out[w] = in[w + 1]: slot 0 gets source section 1 (the singleton), slot 1 gets source 2 (the
         // list section), slots 2..3 pad with empty; the 256-long global section leaves the window.
         byte[] moved1 = singletonSection(3, 0);
-        byte[] moved2 = listPaletteSection(new int[] {0, 1}, new int[16]);
+        byte[] moved2 = listPaletteSection(new int[] {0, 1});
         assertArrayEquals(moved1, Arrays.copyOfRange(out, 0, moved1.length));
         assertArrayEquals(moved2, Arrays.copyOfRange(out, moved1.length, moved1.length + moved2.length));
         assertArrayEquals(SectionCodec.EMPTY_SECTION,

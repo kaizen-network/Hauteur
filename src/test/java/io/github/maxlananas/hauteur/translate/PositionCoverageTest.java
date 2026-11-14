@@ -9,7 +9,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PositionEleme
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundDamageEventPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundTeleportEntityPacket;
-import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.level.ServerboundAcceptTeleportationPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundSetCarriedItemPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundMovePlayerPosRotPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundPlayerActionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.player.ServerboundUseItemOnPacket;
@@ -87,7 +87,7 @@ class PositionCoverageTest {
     @Test
     void packetsWithoutAbsoluteYPassThroughFreeze() {
         assertEquals(OutboundYTransforms.FrozenDisposition.TRANSMIT,
-            OutboundYTransforms.frozenDisposition(new ServerboundAcceptTeleportationPacket(7)));
+            OutboundYTransforms.frozenDisposition(new ServerboundSetCarriedItemPacket(7)));
     }
 
     @Test
@@ -110,13 +110,13 @@ class PositionCoverageTest {
     void blockPositionIsExposedForEveryBlockActionAndNullOtherwise() {
         var dig = new ServerboundPlayerActionPacket(PlayerAction.START_DIGGING, Vector3i.from(4, 600, 5), Direction.UP, 0);
         assertEquals(Vector3i.from(4, 600, 5), OutboundYTransforms.blockPosition(dig));
-        assertNull(OutboundYTransforms.blockPosition(new ServerboundAcceptTeleportationPacket(7)));
+        assertNull(OutboundYTransforms.blockPosition(new ServerboundSetCarriedItemPacket(7)));
     }
 
     @Test
     void movementYIsNaNForPacketsWithoutAbsoluteY() {
         assertEquals(12.5, OutboundYTransforms.movementY(new ServerboundMovePlayerPosRotPacket(true, false, 1, 12.5, 3, 90f, 10f)));
-        assertTrue(Double.isNaN(OutboundYTransforms.movementY(new ServerboundAcceptTeleportationPacket(7))));
+        assertTrue(Double.isNaN(OutboundYTransforms.movementY(new ServerboundSetCarriedItemPacket(7))));
     }
 
     @Test

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -58,7 +59,7 @@ class ShiftedWorldManagerTest {
         }
 
         @Override
-        public void getDecoratedPotData(GeyserSession session, Vector3i pos, Consumer<List<String>> apply) {
+        public void getDecoratedPotData(GeyserSession session, Vector3i pos, Consumer<Map<String, String>> apply) {
             potYs.add(pos.getY());
         }
     }

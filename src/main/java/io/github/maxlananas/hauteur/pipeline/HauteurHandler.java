@@ -207,7 +207,7 @@ public final class HauteurHandler extends ChannelDuplexHandler {
             return;
         }
         if (packet instanceof ClientboundEntityPositionSyncPacket sync && sync.getId() == state.playerJavaId()) {
-            inboundAuthoritative(ctx, packet, sync.getPosition().getY(), false);
+            inboundAuthoritative(ctx, packet, InboundYTransforms.syncY(sync), false);
             return;
         }
         translateInbound(ctx, packet);
