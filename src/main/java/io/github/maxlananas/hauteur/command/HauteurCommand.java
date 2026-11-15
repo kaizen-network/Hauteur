@@ -202,9 +202,11 @@ public final class HauteurCommand {
                 send(session, "§e! §7max-offset-blocks caps you below the automatic value: real Y "
                     + (top + 1) + ".." + (w.javaMaxY() - 1) + " remain unreachable. Set max-offset-blocks=0 for full reach.");
             }
-            if (w.javaMinY() < w.clientMinY()) {
-                send(session, "§e! §7the world's floor is below the client window floor; below real Y "
-                    + w.clientMinY() + " content is clipped by the client itself (vanilla Geyser behaviour).");
+            int bottom = Math.max(w.javaMinY(), w.clientMinY() + w.minOffset());
+            send(session, "§7lowest reachable real Y with current cap: §f" + bottom);
+            if (bottom > w.javaMinY()) {
+                send(session, "§e! §7max-offset-blocks keeps real Y " + w.javaMinY() + ".." + (bottom - 1)
+                    + " out of reach. Set max-offset-blocks=0 for full reach.");
             }
         }
         send(session, ok(state.offset() % 16 == 0) + " §7invariants: offset §f" + state.offset() + " (section-aligned: " + (state.offset() % 16 == 0) + ")"

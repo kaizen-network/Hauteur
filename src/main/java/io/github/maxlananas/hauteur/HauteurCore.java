@@ -265,12 +265,13 @@ public final class HauteurCore implements PipelineSettings {
         }
         state.refreshWindow();
         HauteurSession.WindowConfig w = state.window();
-        if (w != null && w.needed() && w.javaMinY() < w.clientMinY()) {
-            // Offsets are never negative, so real Y below the client floor cannot be shown at any offset.
+        int lowest = w == null ? 0 : w.clientMinY() + w.minOffset();
+        if (w != null && w.needed() && w.javaMinY() < lowest) {
+            // Only max-offset-blocks can leave part of the floor out of reach now that offsets go negative.
             // Said once per session, at join: the window is re-derived often and the message would repeat.
             extension.logger().info("[Hauteur] " + LogSanitizer.playerName(session.bedrockUsername())
-                + ": real Y " + w.javaMinY() + ".." + (w.clientMinY() - 1) + " is below the client floor "
-                + w.clientMinY() + " and is not reachable by the window");
+                + ": real Y " + w.javaMinY() + ".." + (lowest - 1) + " is below the lowest window (max-offset-blocks)"
+                + " and is not reachable");
         }
         tryAttach(session, state, 0);
     }

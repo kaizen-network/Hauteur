@@ -39,15 +39,24 @@ public final class SwitchPolicy {
     public static boolean shouldRequest(double realY, int offset, int clientMinY, int clientHeight, int margin,
                                         int maxOffset, boolean authoritative, long nowMs, long lastSwitchMs,
                                         int backoff, long cooldownMs) {
-        if (!WindowRules.shouldSwitch(realY, offset, clientMinY, clientHeight, margin, maxOffset)) {
+        return shouldRequest(realY, offset, clientMinY, clientHeight, margin, 0, maxOffset, authoritative, nowMs,
+            lastSwitchMs, backoff, cooldownMs);
+    }
+
+    /** As the overload without {@code minOffset}, for an offset range {@code [minOffset, maxOffset]}. */
+    public static boolean shouldRequest(double realY, int offset, int clientMinY, int clientHeight, int margin,
+                                        int minOffset, int maxOffset, boolean authoritative, long nowMs,
+                                        long lastSwitchMs, int backoff, long cooldownMs) {
+        if (!WindowRules.shouldSwitch(realY, offset, clientMinY, clientHeight, margin, minOffset, maxOffset)) {
             return false;
         }
         if (authoritative) {
             return true;
         }
-        // Only a position above the window floor can be brought back by a switch. Below the floor with no offset,
-        // the switch would be a no-op, and the cooldown applies as usual.
-        if (realY >= clientMinY && clientOutsideWindow(realY, offset, clientMinY, clientHeight)) {
+        // A position the client cannot see skips the cooldown, but only when the switch actually brings it into view
+        // (beyond the reachable range it would be a no-op, and the cooldown applies as usual).
+        if (clientOutsideWindow(realY, offset, clientMinY, clientHeight) && !clientOutsideWindow(realY,
+            WindowRules.targetOffset(realY, clientMinY, clientHeight, minOffset, maxOffset), clientMinY, clientHeight)) {
             return true;
         }
         return nowMs - lastSwitchMs >= cooldownMs * Math.max(1, backoff);

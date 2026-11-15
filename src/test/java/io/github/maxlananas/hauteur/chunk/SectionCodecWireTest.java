@@ -102,4 +102,29 @@ class SectionCodecWireTest {
         }
         assertEquals(0, in.readableBytes());
     }
+
+    @Test
+    void negativeShiftMovesSectionsUpAndFillsTheBottomWithAir() throws Exception {
+        List<byte[]> sections = new ArrayList<>();
+        ByteArrayOutputStream payload = new ByteArrayOutputStream();
+        for (int i = 0; i < 24; i++) {
+            byte[] s = encode(SHAPES[i % SHAPES.length][0], SHAPES[i % SHAPES.length][1], 300 + i);
+            sections.add(s);
+            payload.write(s);
+        }
+        int shift = -5; // window section w shows real section w - 5
+        SectionCodec.Result r = SectionCodec.resliceTolerant(payload.toByteArray(), 24, shift, 24);
+        assertFalse(r.anomaly());
+
+        ByteBuf in = Unpooled.wrappedBuffer(r.data());
+        for (int w = 0; w < 24; w++) {
+            int start = in.readerIndex();
+            MinecraftTypes.readChunkSection(in, BLOCK_GLOBAL_BITS, BIOME_GLOBAL_BITS);
+            byte[] got = new byte[in.readerIndex() - start];
+            in.getBytes(start, got);
+            byte[] want = w + shift >= 0 ? sections.get(w + shift) : SectionCodec.EMPTY_SECTION;
+            assertArrayEquals(want, got, "window section " + w);
+        }
+        assertEquals(0, in.readableBytes());
+    }
 }

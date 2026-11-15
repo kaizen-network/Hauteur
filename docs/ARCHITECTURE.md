@@ -16,10 +16,12 @@ realY   = clientY + O    (Java server)
   offsets, `MoveEntityPos` deltas, relative teleport components) are never changed.
 - `Omax = floor16(javaMaxY - clientMinY - clientHeight)`. A larger offset would push the top of the world below
   the client floor without making anything reachable.
-- The target offset centres the player in the window: `O* = snap16(clamp(realY - center, 0, Omax))`.
+- `Omin = min(0, floor16(javaMinY - clientMinY))`. A negative offset shows real Y below the client floor; a
+  lower one would lift the world's floor above the client floor without making anything reachable.
+- The target offset centres the player in the window: `O* = snap16(clamp(realY - center, Omin, Omax))`.
   Implemented in `window/WindowRules`, mirrored in `dev/verify/oracle.py`.
-- `O >= 0` by design, so a real Y below the client floor (`javaMinY < clientMinY`) cannot be shown at any offset.
-  That bottom slice stays unreachable for the player. `HauteurCore` logs it once per session at join.
+- `max-offset-blocks` caps both directions. Only that cap can leave part of the floor unreachable, and
+  `HauteurCore` then logs it once per session at join.
 - If the real dimension fits the client window, `WindowConfig.needed` is false and the pipeline does nothing
   except watch login and respawn.
 

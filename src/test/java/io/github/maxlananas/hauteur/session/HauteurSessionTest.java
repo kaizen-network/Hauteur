@@ -51,16 +51,17 @@ class HauteurSessionTest {
     }
 
     @Test
-    void windowingStaysOffWhenNoNonNegativeOffsetCanHelp() {
-        // The world starts below the client floor, but its top already fits. A non-negative offset moves
-        // content down in client space, which only makes the bottom worse. floorToSection(200 - 256) = -64,
-        // so the useful maximum is not positive.
+    void aWorldBelowTheClientFloorIsReachedWithANegativeOffset() {
+        // The world starts below the client floor and its top already fits: no positive offset helps
+        // (floorToSection(200 - 256) = -64), but a negative one shows the floor: floorToSection(-64 - 0) = -64.
         HauteurSession.WindowConfig w = HauteurSession.WindowConfig.of(-64, 200, 0, 256, 0);
-        assertFalse(w.needed());
+        assertTrue(w.needed());
         assertEquals(0, w.maxOffset());
+        assertEquals(-64, w.minOffset());
 
-        // an override cannot switch on what the window rules rule out
-        assertFalse(HauteurSession.WindowConfig.of(-64, 200, 0, 256, 512).needed());
+        // max-offset-blocks caps both directions; a cap above the useful range changes nothing
+        assertEquals(-64, HauteurSession.WindowConfig.of(-64, 200, 0, 256, 512).minOffset());
+        assertEquals(-32, HauteurSession.WindowConfig.of(-64, 200, 0, 256, 32).minOffset());
     }
 
     @Test

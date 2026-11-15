@@ -25,22 +25,25 @@ def windowing_needed(java_min_y, java_max_y, client_min_y, client_height):
 def max_useful_offset(java_max_y, client_min_y, client_height):
     return floor_to_section(java_max_y - client_min_y - client_height)
 
-def target_offset(real_y, client_min_y, client_height, max_offset):
-    if max_offset <= 0:
+def min_useful_offset(java_min_y, client_min_y):
+    return min(0, floor_to_section(java_min_y - client_min_y))
+
+def target_offset(real_y, client_min_y, client_height, max_offset, min_offset=0):
+    if max_offset <= 0 and min_offset >= 0:
         return 0
     centered = real_y - (client_min_y + client_height / 2.0)
     snapped = math.floor(centered / SECTION + 0.5) * SECTION  # Java Math.floor, not int() truncation
-    return max(0, min(max_offset, snapped))
+    return max(min(0, min_offset), min(max(0, max_offset), snapped))
 
-def should_switch(real_y, current_offset, client_min_y, client_height, margin, max_offset):
+def should_switch(real_y, current_offset, client_min_y, client_height, margin, max_offset, min_offset=0):
     # Mirrors WindowRules.shouldSwitch: the margin is capped so the post-switch band never reaches a trigger zone.
     effective_margin = max(0, min(margin, client_height // 2 - SECTION))
     client_y = real_y - current_offset
     near_top = client_y >= client_min_y + client_height - effective_margin
-    near_bottom = current_offset > 0 and client_y <= client_min_y + effective_margin
+    near_bottom = current_offset > min(0, min_offset) and client_y <= client_min_y + effective_margin
     if not near_top and not near_bottom:
         return False
-    return target_offset(real_y, client_min_y, client_height, max_offset) != current_offset
+    return target_offset(real_y, client_min_y, client_height, max_offset, min_offset) != current_offset
 
 EMPTY_SECTION = bytes([0, 0, 0, 0, 0, 0, 0, 0])
 BLOCK_MAX_PALETTE_BITS = 8
@@ -362,13 +365,27 @@ def property_section_size_bounds():
     sparse = 126 * len(s)
     assert 1000 < sparse < 2048  # ~1KB for an all-air BTE sky chunk payload: cheap to replay
 
+def property_reachable_below_floor():
+    """Negative offsets: in a world tall in both directions (Everest-like, real [-2032, 2032) against the
+    overworld client window [-64, 320)), every real Y maps inside the client window at its target offset, offsets
+    are section-aligned and inside [min_useful, max_useful], and arriving never asks for a second switch."""
+    j_min, j_max, c_min, c_h = -2032, 2032, -64, 384
+    mx = max_useful_offset(j_max, c_min, c_h)
+    mn = min_useful_offset(j_min, c_min)
+    assert (mn, mx) == (-1968, 1712), (mn, mx)
+    for real_y in range(j_min, j_max):
+        o = target_offset(real_y, c_min, c_h, mx, mn)
+        assert o % SECTION == 0 and mn <= o <= mx, (real_y, o)
+        assert c_min <= real_y - o < c_min + c_h, (real_y, o)
+        assert not should_switch(real_y, o, c_min, c_h, MARGIN, mx, mn), real_y
+
 def main():
     rounds = int(sys.argv[1]) if len(sys.argv) > 1 else 1
     props = [property_reachable_window, property_switch_cadence, property_no_flicker_at_any_margin,
              property_fits_never_switches,
              property_reslice_semantics, property_malformed_input_throws,
              property_tolerant_reslice_contract, property_reachable_top_formula,
-             property_section_size_bounds]
+             property_section_size_bounds, property_reachable_below_floor]
     for r in range(rounds):
         for prop in props:
             prop()

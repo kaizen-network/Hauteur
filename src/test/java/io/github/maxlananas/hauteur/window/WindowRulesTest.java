@@ -185,4 +185,33 @@ class WindowRulesTest {
         assertTrue(switches * 1000L <= walked * 5L,
             "thrashing: " + switches + " switches over " + walked + " blocks walked");
     }
+
+    @ParameterizedTest
+    @CsvSource({
+        "-2032, 2032, -64, 384",  // Everest: tall in both directions
+        "-64, 200, 0, 256",       // floor below the client floor only
+        "-112, 512, -64, 384",    // floor and top both beyond the client window (dimensions are 16-aligned)
+        "0, 4064, -64, 384",      // top only (the original positive-only case)
+    })
+    void everyRealYIsVisibleAtItsTargetAndDoesNotSwitchAgain(int javaMinY, int javaMaxY, int clientMinY, int clientHeight) {
+        var w = io.github.maxlananas.hauteur.session.HauteurSession.WindowConfig.of(javaMinY, javaMaxY, clientMinY,
+            clientHeight, 0);
+        for (int realY = javaMinY; realY < javaMaxY; realY++) {
+            int target = WindowRules.targetOffset(realY, clientMinY, clientHeight, w.minOffset(), w.maxOffset());
+            assertEquals(0, target % WindowRules.SECTION, "section-aligned at " + realY);
+            int clientY = realY - target;
+            assertTrue(clientY >= clientMinY && clientY < clientMinY + clientHeight,
+                "real Y " + realY + " -> client Y " + clientY + " at offset " + target);
+            assertFalse(WindowRules.shouldSwitch(realY, target, clientMinY, clientHeight, 64, w.minOffset(), w.maxOffset()),
+                "re-switch right after arriving at " + realY);
+        }
+    }
+
+    @Test
+    void minUsefulOffsetKeepsTheFloorInsideTheWindow() {
+        assertEquals(-1968, WindowRules.minUsefulOffset(-2032, -64));
+        assertEquals(-48, WindowRules.minUsefulOffset(-100, -64), "rounded down so the floor block still shows");
+        assertEquals(0, WindowRules.minUsefulOffset(-64, -64));
+        assertEquals(0, WindowRules.minUsefulOffset(0, -64));
+    }
 }

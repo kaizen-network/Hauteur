@@ -54,6 +54,15 @@ public final class WindowRules {
     }
 
     /**
+     * Lowest (most negative) offset that still keeps the world's floor (javaMinY) inside the window, or 0 when the
+     * floor already fits. A negative offset shows real Y below the client floor: {@code clientY = realY - offset}.
+     * Lower offsets would lift the floor above the client floor without making any new area reachable.
+     */
+    public static int minUsefulOffset(int javaMinY, int clientMinY) {
+        return Math.min(0, floorToSection(javaMinY - clientMinY));
+    }
+
+    /**
      * Offset that centers the window around {@code realY}: the window's client-space center is
      * {@code clientMinY + clientHeight / 2}, so an offset of {@code realY - center} puts the player
      * in the middle of the window and defers the next switch as long as possible. This centering is
@@ -61,14 +70,19 @@ public final class WindowRules {
      * without any hysteresis bookkeeping.
      */
     public static int targetOffset(double realY, int clientMinY, int clientHeight, int maxOffset) {
-        if (maxOffset <= 0 || !Double.isFinite(realY)) {
+        return targetOffset(realY, clientMinY, clientHeight, 0, maxOffset);
+    }
+
+    /** As {@link #targetOffset(double, int, int, int)}, clamped to {@code [minOffset, maxOffset]}. */
+    public static int targetOffset(double realY, int clientMinY, int clientHeight, int minOffset, int maxOffset) {
+        if ((maxOffset <= 0 && minOffset >= 0) || !Double.isFinite(realY)) {
             return 0; // no usable position: keep the current frame's neutral choice
         }
         double centered = realY - (clientMinY + clientHeight / 2.0);
         // Snap and clamp in double precision, then narrow. An int product overflowed for |realY| above about
         // 2e9, which sent a far-away position to offset 0 while 1e10 went to the maximum.
         double snapped = Math.floor(centered / SECTION + 0.5) * SECTION;
-        return (int) Math.max(0, Math.min(maxOffset, snapped));
+        return (int) Math.max(Math.min(0, minOffset), Math.min(Math.max(0, maxOffset), snapped));
     }
 
     /**
@@ -77,6 +91,12 @@ public final class WindowRules {
      */
     public static boolean shouldSwitch(double realY, int currentOffset, int clientMinY, int clientHeight,
                                        int margin, int maxOffset) {
+        return shouldSwitch(realY, currentOffset, clientMinY, clientHeight, margin, 0, maxOffset);
+    }
+
+    /** As {@link #shouldSwitch(double, int, int, int, int, int)}, for an offset range {@code [minOffset, maxOffset]}. */
+    public static boolean shouldSwitch(double realY, int currentOffset, int clientMinY, int clientHeight,
+                                       int margin, int minOffset, int maxOffset) {
         // After a switch the client sits within 8 blocks of the window centre (targetOffset snaps to 16). A margin
         // of H/2 - 8 or more puts that band inside the trigger zone, so every section boundary re-triggered a switch
         // (measured: about 55 switches per 1000 blocks walked for H=256 and margin 128). The margin is therefore capped
@@ -84,11 +104,11 @@ public final class WindowRules {
         int effectiveMargin = Math.max(0, Math.min(margin, clientHeight / 2 - SECTION));
         double clientY = realY - currentOffset;
         boolean nearTop = clientY >= clientMinY + clientHeight - effectiveMargin;
-        boolean nearBottom = currentOffset > 0 && clientY <= clientMinY + effectiveMargin;
+        boolean nearBottom = currentOffset > Math.min(0, minOffset) && clientY <= clientMinY + effectiveMargin;
         if (!nearTop && !nearBottom) {
             return false;
         }
-        return targetOffset(realY, clientMinY, clientHeight, maxOffset) != currentOffset;
+        return targetOffset(realY, clientMinY, clientHeight, minOffset, maxOffset) != currentOffset;
     }
 
 }

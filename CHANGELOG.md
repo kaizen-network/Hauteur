@@ -6,6 +6,19 @@ commands and jar name. The pinned Geyser build is listed in the README.
 
 ## [Unreleased]
 
+### Added
+- Negative offsets: real Y below the client floor (`javaMinY < clientMinY`, for example a world starting at
+  Y -2032) is now reachable. `max-offset-blocks` caps both directions.
+
+### Fixed
+- Chunk sections are read in the 1.21.5+ layout (fixed-size palette storage, no length prefix). The old walker
+  mis-measured every non-uniform section, so windowed chunks turned to air or failed to decode in Geyser.
+- Builds against Geyser 2.12.1: stepped `ClientboundEntityPositionSyncPacket`, map-based decorated pot data.
+- The 26.3 teleport accept carries an absolute position; it is now shifted back to real space with the offset
+  its teleport was translated in.
+- The window of a new world is taken from the login/respawn packet's dimension. Reading it from Geyser's chunk
+  cache raced Geyser's own translator, so a spawn high in a tall world could get no window at all.
+
 ## [2.0.0] - 2026-10-25
 
 Renamed from SkyWindow to Hauteur, with a new package, `groupId` and configuration location, so this is a

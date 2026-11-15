@@ -496,7 +496,7 @@ public final class HauteurHandler extends ChannelDuplexHandler {
         }
         HauteurConfig config = core.config();
         if (!SwitchPolicy.shouldRequest(realY, state.offset(), w.clientMinY(), w.clientHeight(),
-            config.switchMarginBlocks, w.maxOffset(), authoritative, System.currentTimeMillis(),
+            config.switchMarginBlocks, w.minOffset(), w.maxOffset(), authoritative, System.currentTimeMillis(),
             state.lastSwitchAtMs(), state.switchBackoff(), config.switchCooldownMs)) {
             return;
         }
@@ -544,7 +544,7 @@ public final class HauteurHandler extends ChannelDuplexHandler {
                 return;
             }
             HauteurConfig config = core.config();
-            int target = WindowRules.targetOffset(realY, w.clientMinY(), w.clientHeight(), w.maxOffset());
+            int target = WindowRules.targetOffset(realY, w.clientMinY(), w.clientHeight(), w.minOffset(), w.maxOffset());
             int previous = state.offset();
             if (target == previous) {
                 return;

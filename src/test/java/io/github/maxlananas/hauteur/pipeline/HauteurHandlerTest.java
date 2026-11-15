@@ -16,6 +16,7 @@ import org.geysermc.mcprotocollib.protocol.data.game.level.block.BlockEntityInfo
 import net.kyori.adventure.key.Key;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.GameMode;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerSpawnInfo;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundRespawnPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundTeleportEntityPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
@@ -224,7 +225,9 @@ class HauteurHandlerTest {
     @Test
     void movementPassesUnchangedAtOffsetZero() {
         Rig rig = new Rig(windowNeeded());
-        ServerboundMovePlayerPosPacket low = rig.move(10);
+        // Mid-window, clear of both switch margins (the world floor -64 is below the client floor, so a position near
+        // the client floor would now switch down).
+        ServerboundMovePlayerPosPacket low = rig.move(128);
 
         assertSame(low, rig.sendMove(low));
         assertEquals(0, rig.state.offset());
@@ -459,5 +462,60 @@ class HauteurHandlerTest {
             Vector3d.ZERO, 0f, 0f, List.of()));
         assertEquals(TARGET_OFFSET, rig.state.offset());
         assertEquals(1, rig.state.total(HauteurSession.Stat.WINDOW_SWITCHES));
+    }
+
+    /** Everest: real [-2032, 2032) against the overworld client window [-64, 320). */
+    private static HauteurSession.WindowConfig everest() {
+        return HauteurSession.WindowConfig.of(-2032, 2032, -64, 384, 0);
+    }
+
+    private static ClientboundPlayerPositionPacket teleport(int id, double realY) {
+        return new ClientboundPlayerPositionPacket(id, Vector3d.from(0.5, realY, 0.5), Vector3d.ZERO, 0f, 0f, List.of());
+    }
+
+    @Test
+    void deepTeleportUsesANegativeOffsetAndTranslatesBothWays() {
+        Rig rig = new Rig(everest());
+        rig.channel.writeInbound(teleport(3, -1284));
+        // centre -1284 - 128 = -1412, snapped to -1408: the spawn shows at client Y 124
+        assertEquals(-1408, rig.state.offset());
+        var shown = (ClientboundPlayerPositionPacket) rig.drainInbound().stream()
+            .filter(ClientboundPlayerPositionPacket.class::isInstance).findFirst().orElseThrow();
+        assertEquals(124, shown.getPosition().getY(), 1e-9);
+        rig.endFreeze();
+
+        // client-frame packets go back to real space
+        var moved = (ServerboundMovePlayerPosPacket) rig.sendMove(rig.move(124.5));
+        assertEquals(-1283.5, moved.getY(), 1e-9);
+        rig.channel.writeOutbound(dig(1, 120, 1));
+        var dug = (ServerboundPlayerActionPacket) rig.channel.readOutbound();
+        assertEquals(-1288, dug.getPosition().getY());
+    }
+
+    @Test
+    void climbingFromBelowZeroToTheSummitCrossesIntoPositiveOffsets() {
+        Rig rig = new Rig(everest());
+        rig.channel.writeInbound(teleport(3, -1284));
+        rig.endFreeze();
+        rig.drainInbound();
+        rig.channel.writeInbound(teleport(4, 2000));
+        // centre 2000 - 128 = 1872, clamped to the useful maximum 2032 + 64 - 384 = 1712
+        assertEquals(1712, rig.state.offset());
+        var shown = (ClientboundPlayerPositionPacket) rig.drainInbound().stream()
+            .filter(ClientboundPlayerPositionPacket.class::isInstance).findFirst().orElseThrow();
+        assertEquals(288, shown.getPosition().getY(), 1e-9);
+    }
+
+    @Test
+    void loginTakesTheNewWorldsWindowBeforeGeysersChunkCacheCatchesUp() {
+        // Same race as the respawn case, through the login packet a server switch sends.
+        Rig rig = new Rig(windowNotNeeded());
+        rig.session.spawnWindow = windowNeeded();
+        rig.channel.writeInbound(new ClientboundLoginPacket(PLAYER_ID, false, new Key[] {Key.key("minecraft:overworld")},
+            20, 10, 10, false, true, false, new PlayerSpawnInfo(0, Key.key("minecraft:overworld"), 0L, GameMode.SURVIVAL,
+            GameMode.SURVIVAL, false, false, null, 0, 63), false, false));
+        rig.drainInbound();
+        rig.channel.writeInbound(teleport(5, HIGH_REAL_Y));
+        assertEquals(TARGET_OFFSET, rig.state.offset());
     }
 }

@@ -29,21 +29,29 @@ import java.util.concurrent.atomic.LongAdder;
 public final class HauteurSession {
 
     /** Immutable snapshot of the dimension bounds the window math needs. Recomputed at login/respawn. */
-    public record WindowConfig(boolean needed, int javaMinY, int javaMaxY, int clientMinY, int clientHeight, int maxOffset) {
+    public record WindowConfig(boolean needed, int javaMinY, int javaMaxY, int clientMinY, int clientHeight, int maxOffset,
+                               int minOffset) {
+        /**
+         * @param maxOffsetOverride {@code max-offset-blocks}: when positive, caps the offset in both directions
+         */
         public static WindowConfig of(int javaMinY, int javaMaxY, int clientMinY, int clientHeight, int maxOffsetOverride) {
             int autoMax = WindowRules.maxUsefulOffset(javaMaxY, clientMinY, clientHeight);
+            int autoMin = WindowRules.minUsefulOffset(javaMinY, clientMinY);
             boolean needed = WindowRules.windowingNeeded(javaMinY, javaMaxY, clientMinY, clientHeight);
             int maxOffset = 0;
+            int minOffset = 0;
             if (needed) {
                 maxOffset = Math.max(0, autoMax);
+                minOffset = Math.min(0, autoMin);
                 if (maxOffsetOverride > 0) {
                     maxOffset = Math.min(maxOffsetOverride, maxOffset);
+                    minOffset = Math.max(-maxOffsetOverride, minOffset);
                 }
-                if (maxOffset <= 0) {
+                if (maxOffset <= 0 && minOffset >= 0) {
                     needed = false;
                 }
             }
-            return new WindowConfig(needed, javaMinY, javaMaxY, clientMinY, clientHeight, maxOffset);
+            return new WindowConfig(needed, javaMinY, javaMaxY, clientMinY, clientHeight, maxOffset, minOffset);
         }
 
         public WindowedChunks.Params chunkParams(int offset) {
