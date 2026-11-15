@@ -167,6 +167,10 @@ public final class HauteurSession {
         return window;
     }
 
+    public void setWindow(WindowConfig value) {
+        this.window = value;
+    }
+
     public boolean windowDirty() {
         return windowDirty;
     }

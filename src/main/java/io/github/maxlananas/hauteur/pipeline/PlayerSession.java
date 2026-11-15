@@ -1,5 +1,6 @@
 package io.github.maxlananas.hauteur.pipeline;
 
+import io.github.maxlananas.hauteur.session.HauteurSession;
 import org.cloudburstmc.math.vector.Vector3f;
 
 /**
@@ -26,4 +27,11 @@ public interface PlayerSession {
 
     /** Block state id at a position in the client frame, as Geyser's world manager reports it. */
     int blockAt(int x, int y, int z);
+
+    /**
+     * The window for a dimension type id from a login/respawn packet, read from the registries the server sent
+     * during configuration; null if it cannot be resolved. Unlike Geyser's chunk cache, this does not wait for
+     * Geyser's own login/respawn translator, which runs on another thread after this pipeline sees the packet.
+     */
+    HauteurSession.WindowConfig windowForDimension(int dimensionId, int maxOffsetOverride);
 }

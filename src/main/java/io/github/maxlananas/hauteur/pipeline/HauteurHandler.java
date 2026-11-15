@@ -175,12 +175,14 @@ public final class HauteurHandler extends ChannelDuplexHandler {
         if (packet instanceof ClientboundLoginPacket login) {
             state.setPlayerJavaId(login.getEntityId());
             startNewWorld();
+            adoptSpawnWindow(login.getCommonPlayerSpawnInfo().getDimension());
             ctx.fireChannelRead(login);
             return;
         }
-        if (packet instanceof ClientboundRespawnPacket) {
+        if (packet instanceof ClientboundRespawnPacket respawn) {
             // A dimension change replaces the world wholesale; drop cached chunks and re-derive.
             startNewWorld();
+            adoptSpawnWindow(respawn.getCommonPlayerSpawnInfo().getDimension());
             ctx.fireChannelRead(packet);
             return;
         }
@@ -807,6 +809,20 @@ public final class HauteurHandler extends ChannelDuplexHandler {
         state.nextWorldGeneration();
         state.setWindowDirty(true);
         resetTransition();
+    }
+
+    /**
+     * Takes the new world's window from the packet's own dimension type. Re-deriving it from Geyser's chunk cache at
+     * the next packet raced Geyser's login/respawn translator (another thread): when the first position arrived first,
+     * the old world's bounds were adopted and the dirty flag cleared, so a spawn high in a tall world never switched.
+     * If the dimension cannot be resolved, the window stays dirty and the chunk cache path applies as before.
+     */
+    private void adoptSpawnWindow(int dimensionId) {
+        HauteurSession.WindowConfig w = session.windowForDimension(dimensionId, core.config().maxOffsetBlocks);
+        if (w != null) {
+            state.setWindow(w);
+            state.setWindowDirty(false);
+        }
     }
 
     private void resetTransition() {

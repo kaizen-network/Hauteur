@@ -13,6 +13,10 @@ import org.geysermc.mcprotocollib.protocol.data.game.entity.object.Direction;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerAction;
 import org.geysermc.mcprotocollib.protocol.data.game.level.LightUpdateData;
 import org.geysermc.mcprotocollib.protocol.data.game.level.block.BlockEntityInfo;
+import net.kyori.adventure.key.Key;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.GameMode;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerSpawnInfo;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundRespawnPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundTeleportEntityPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundPlayerPositionPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundBlockUpdatePacket;
@@ -103,6 +107,14 @@ class HauteurHandlerTest {
         @Override
         public int blockAt(int x, int y, int z) {
             return 0;
+        }
+
+        /** Window the registries report for any dimension id; null = unresolvable. */
+        HauteurSession.WindowConfig spawnWindow;
+
+        @Override
+        public HauteurSession.WindowConfig windowForDimension(int dimensionId, int maxOffsetOverride) {
+            return spawnWindow;
         }
     }
 
@@ -430,5 +442,22 @@ class HauteurHandlerTest {
             0.5, 0f, 0f));
         var accept = (ServerboundAcceptTeleportationPacket) rig.channel.readOutbound();
         assertEquals(HIGH_REAL_Y, accept.getY(), 1e-9);
+    }
+
+    @Test
+    void respawnTakesTheNewWorldsWindowBeforeGeysersChunkCacheCatchesUp() {
+        // Geyser's chunk cache still describes the old, short world: its respawn translator runs on another thread.
+        Rig rig = new Rig(windowNotNeeded());
+        // The respawn packet itself names a tall dimension.
+        rig.session.spawnWindow = windowNeeded();
+        rig.channel.writeInbound(new ClientboundRespawnPacket(new PlayerSpawnInfo(0, Key.key("minecraft:overworld"),
+            0L, GameMode.SURVIVAL, GameMode.SURVIVAL, false, false, null, 0, 63), false, false));
+        rig.drainInbound();
+
+        // First position in the new world, high up: it must switch, not adopt the stale short-world bounds.
+        rig.channel.writeInbound(new ClientboundPlayerPositionPacket(5, Vector3d.from(0.5, HIGH_REAL_Y, 0.5),
+            Vector3d.ZERO, 0f, 0f, List.of()));
+        assertEquals(TARGET_OFFSET, rig.state.offset());
+        assertEquals(1, rig.state.total(HauteurSession.Stat.WINDOW_SWITCHES));
     }
 }
